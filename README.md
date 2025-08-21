@@ -129,6 +129,7 @@ cargo run --release
 - **Page Monitoring**: Watch the page usage indicator to see how much space is remaining
 - **Word Wrapping**: Content automatically wraps within the editor area
 - **Smart Page Breaks**: Page overflow finds natural break points (line breaks, spaces) when splitting content
+- **Clean Content Handling**: Hint text ("Start writing your notes here...") is automatically filtered out and never saved to files or included in page overflow calculations
 
 ## Architecture
 
@@ -179,6 +180,17 @@ struct Page {
 - `chrono`: Date and time handling
 - `uuid`: UUID generation
 - `rfd`: Native file dialogs
+
+## Troubleshooting
+
+### Common Issues
+
+- **Hint text appearing in saved content**: This has been fixed in the latest version. The placeholder text "Start writing your notes here..." is automatically filtered out and never saved to files or included in page overflow.
+- **Page overflow not working**: Ensure you're typing actual content, not just the hint text. The page counter only includes real content.
+- **Auto-save not working**: Make sure you have:
+  1. Checked the "Auto-save" checkbox in the sidebar
+  2. Saved the file at least once to establish a file path
+  3. Look for the green checkmark (✓) indicating auto-save is active
 
 ## License
 

@@ -17,6 +17,7 @@ use onenote_converter::OneNoteConverter;
 const PAGE_MAX_LINES: usize = 46;
 const PAGE_MAX_CHARS_PER_LINE: usize = 80;
 const PAGE_MAX_CHARS: usize = PAGE_MAX_LINES * PAGE_MAX_CHARS_PER_LINE; // ~3680 chars
+const HINT_TEXT: &str = "Start writing your notes here...";
 
 #[derive(Parser)]
 #[command(name = "notebookx")]
@@ -74,6 +75,28 @@ struct NotebookXApp {
 }
 
 impl NotebookXApp {
+    fn clean_content(&self, content: &str) -> String {
+        // Remove hint text if it's the only content or at the beginning
+        let cleaned = if content == HINT_TEXT {
+            String::new()
+        } else if content.starts_with(HINT_TEXT) {
+            content.strip_prefix(HINT_TEXT).unwrap_or(content).to_string()
+        } else {
+            content.to_string()
+        };
+        
+        // Remove any trailing hint text
+        if cleaned.ends_with(HINT_TEXT) {
+            cleaned.strip_suffix(HINT_TEXT).unwrap_or(&cleaned).to_string()
+        } else {
+            cleaned
+        }
+    }
+    
+    fn get_clean_content_length(&self) -> usize {
+        self.clean_content(&self.page_content_buffer).len()
+    }
+    
     fn ensure_notebook(&mut self) {
         if self.notebook.is_none() {
             let mut notebook = Notebook::new("Default Notebook".to_string());
@@ -105,11 +128,13 @@ impl NotebookXApp {
     }
     
     fn save_current_page(&mut self) {
+        let clean_content = self.clean_content(&self.page_content_buffer);
+        
         if let (Some(notebook), Some(page_id)) = (&mut self.notebook, &self.current_page_id) {
             notebook.update_page(
                 page_id,
                 self.page_title_buffer.clone(),
-                self.page_content_buffer.clone(),
+                clean_content,
             );
             
             // Auto-save to file if enabled and file path exists
@@ -122,7 +147,8 @@ impl NotebookXApp {
     }
     
     fn handle_page_overflow(&mut self) -> bool {
-        if self.page_content_buffer.len() <= PAGE_MAX_CHARS {
+        let clean_content = self.clean_content(&self.page_content_buffer);
+        if clean_content.len() <= PAGE_MAX_CHARS {
             return false;
         }
         
@@ -132,13 +158,13 @@ impl NotebookXApp {
                 notebook.update_page(
                     page_id,
                     self.page_title_buffer.clone(),
-                    self.page_content_buffer.clone(),
+                    clean_content.clone(),
                 );
             }
             
             // Find a good break point (prefer line breaks)
             let mut split_point = PAGE_MAX_CHARS;
-            let chars: Vec<char> = self.page_content_buffer.chars().collect();
+            let chars: Vec<char> = clean_content.chars().collect();
             
             // Look backwards for a good break point (newline or space)
             for i in (PAGE_MAX_CHARS.saturating_sub(200)..PAGE_MAX_CHARS.min(chars.len())).rev() {
@@ -150,7 +176,7 @@ impl NotebookXApp {
                 }
             }
             
-            // Split the content
+            // Split the clean content
             let current_content: String = chars.iter().take(split_point).collect();
             let overflow_content: String = chars.iter().skip(split_point).collect();
             
@@ -378,7 +404,7 @@ impl eframe::App for NotebookXApp {
                 ui.separator();
                 
                 // Page size indicator
-                let chars_used = self.page_content_buffer.len();
+                let chars_used = self.get_clean_content_length();
                 let chars_remaining = PAGE_MAX_CHARS.saturating_sub(chars_used);
                 let usage_percent = (chars_used as f32 / PAGE_MAX_CHARS as f32 * 100.0).min(100.0);
                 
@@ -402,7 +428,7 @@ impl eframe::App for NotebookXApp {
                         let text_edit = egui::TextEdit::multiline(&mut self.page_content_buffer)
                             .desired_width(f32::INFINITY)
                             .desired_rows(30)
-                            .hint_text("Start writing your notes here...")
+                            .hint_text(HINT_TEXT)
                             .font(egui::TextStyle::Monospace)
                             .code_editor();
                         
@@ -429,8 +455,8 @@ impl eframe::App for NotebookXApp {
                         }
                         
                         if content_response.changed() {
-                            // Check for immediate page overflow
-                            if self.page_content_buffer.len() > PAGE_MAX_CHARS {
+                            // Check for immediate page overflow using clean content
+                            if self.get_clean_content_length() > PAGE_MAX_CHARS {
                                 self.handle_page_overflow();
                             } else if self.autosave_enabled {
                                 // Auto-save if enabled and content changed
