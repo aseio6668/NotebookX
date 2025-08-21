@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NotebookX</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            display: flex;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .pages-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .page-item {
+            padding: 12px 20px;
+            border-bottom: 1px solid #e9ecef;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .page-item:hover {
+            background-color: #e9ecef;
+        }
+        
+        .page-item.active {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .page-title {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        
+        .page-meta {
+            font-size: 0.85em;
+            color: #6c757d;
+        }
+        
+        .page-item.active .page-meta {
+            color: #b8daff;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .content-header {
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+            background: white;
+        }
+        
+        .content-area {
+            flex: 1;
+            padding: 20px;
+            background: white;
+        }
+        
+        .page-editor {
+            width: 100%;
+            height: 100%;
+            border: none;
+            outline: none;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: none;
+            font-family: inherit;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: 1px solid #007bff;
+            background: #007bff;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: #007bff;
+        }
+        
+        .btn-secondary:hover {
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>NotebookX</h2>
+            <button class="btn" id="new-page-btn" style="margin-top: 10px;">New Page</button>
+        </div>
+        <div class="pages-list" id="pages-list">
+            <!-- Pages will be dynamically loaded here -->
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="content-header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <input type="text" id="page-title" placeholder="Page Title" style="font-size: 18px; font-weight: bold; border: none; outline: none; padding: 4px; background: transparent;">
+                    <div id="page-meta" style="font-size: 12px; color: #6c757d; margin-top: 4px;"></div>
+                </div>
+                <div>
+                    <button class="btn btn-secondary" id="save-btn">Save</button>
+                    <button class="btn btn-secondary" id="open-btn" style="margin-left: 8px;">Open</button>
+                </div>
+            </div>
+        </div>
+        <div class="content-area">
+            <textarea class="page-editor" id="page-content" placeholder="Start writing your notes here..."></textarea>
+        </div>
+    </div>
+
+    <script>
+        const { invoke } = window.__TAURI__.tauri;
+        
+        let currentNotebook = null;
+        let currentPageId = null;
+        
+        // DOM elements
+        const pagesList = document.getElementById('pages-list');
+        const pageTitle = document.getElementById('page-title');
+        const pageContent = document.getElementById('page-content');
+        const pageMeta = document.getElementById('page-meta');
+        const newPageBtn = document.getElementById('new-page-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const openBtn = document.getElementById('open-btn');
+        
+        // Initialize app
+        async function init() {
+            await loadDefaultNotebook();
+        }
+        
+        async function loadDefaultNotebook() {
+            try {
+                currentNotebook = await invoke('create_default_notebook');
+                renderPagesList();
+                if (currentNotebook.pages.length > 0) {
+                    selectPage(currentNotebook.pages[0].id);
+                }
+            } catch (error) {
+                console.error('Failed to load notebook:', error);
+            }
+        }
+        
+        function renderPagesList() {
+            pagesList.innerHTML = '';
+            currentNotebook.pages.forEach(page => {
+                const pageItem = document.createElement('div');
+                pageItem.className = 'page-item';
+                pageItem.dataset.pageId = page.id;
+                
+                const created = new Date(page.created).toLocaleDateString();
+                const pageNumber = page.number ? `#${page.number}` : '';
+                
+                pageItem.innerHTML = `
+                    <div class="page-title">${page.title || 'Untitled'}</div>
+                    <div class="page-meta">${pageNumber} • ${created}</div>
+                `;
+                
+                pageItem.addEventListener('click', () => selectPage(page.id));
+                pagesList.appendChild(pageItem);
+            });
+        }
+        
+        function selectPage(pageId) {
+            // Remove active class from all pages
+            document.querySelectorAll('.page-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // Add active class to selected page
+            const selectedItem = document.querySelector(`[data-page-id="${pageId}"]`);
+            if (selectedItem) {
+                selectedItem.classList.add('active');
+            }
+            
+            // Load page content
+            const page = currentNotebook.pages.find(p => p.id === pageId);
+            if (page) {
+                currentPageId = pageId;
+                pageTitle.value = page.title || '';
+                pageContent.value = page.content || '';
+                
+                const created = new Date(page.created).toLocaleDateString();
+                const modified = new Date(page.modified).toLocaleDateString();
+                const pageNumber = page.number ? `Page ${page.number} • ` : '';
+                pageMeta.textContent = `${pageNumber}Created: ${created} • Modified: ${modified}`;
+            }
+        }
+        
+        async function savePage() {
+            if (currentPageId) {
+                try {
+                    await invoke('save_page', {
+                        pageId: currentPageId,
+                        title: pageTitle.value,
+                        content: pageContent.value
+                    });
+                    
+                    // Update local notebook data
+                    const page = currentNotebook.pages.find(p => p.id === currentPageId);
+                    if (page) {
+                        page.title = pageTitle.value;
+                        page.content = pageContent.value;
+                        page.modified = new Date().toISOString();
+                    }
+                    
+                    renderPagesList();
+                    selectPage(currentPageId);
+                } catch (error) {
+                    console.error('Failed to save page:', error);
+                }
+            }
+        }
+        
+        async function createNewPage() {
+            try {
+                const newPage = await invoke('create_new_page');
+                currentNotebook.pages.push(newPage);
+                renderPagesList();
+                selectPage(newPage.id);
+            } catch (error) {
+                console.error('Failed to create new page:', error);
+            }
+        }
+        
+        async function openNotebook() {
+            try {
+                const notebook = await invoke('open_notebook');
+                if (notebook) {
+                    currentNotebook = notebook;
+                    renderPagesList();
+                    if (currentNotebook.pages.length > 0) {
+                        selectPage(currentNotebook.pages[0].id);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to open notebook:', error);
+            }
+        }
+        
+        // Event listeners
+        newPageBtn.addEventListener('click', createNewPage);
+        saveBtn.addEventListener('click', savePage);
+        openBtn.addEventListener('click', openNotebook);
+        
+        // Auto-save on content change
+        let saveTimeout;
+        pageContent.addEventListener('input', () => {
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(savePage, 1000);
+        });
+        
+        pageTitle.addEventListener('input', () => {
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(savePage, 1000);
+        });
+        
+        // Initialize app when page loads
+        init();
+    </script>
+</body>
+</html>
