@@ -27,6 +27,8 @@ A cross-platform GUI notebook application built in Rust, similar to Microsoft On
 - **Immediate Page Overflow**: Content automatically splits to new pages as you type when limit is exceeded
 - **Content Preservation**: No data loss during page overflow - all content is preserved and properly transferred
 
+![My Image](ssnotebook.png)
+
 ## NotebookX File Format
 
 NotebookX uses a simple text-based format that embeds metadata within the file:
